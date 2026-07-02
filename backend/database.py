@@ -52,6 +52,19 @@ def init_db():
                 FloodZone(id="3", name="Bibwewadi Underpass", lat=18.4713, lon=73.8590, historical_risk=4),
                 FloodZone(id="4", name="Warje Naka", lat=18.4700, lon=73.8074, historical_risk=3),
                 FloodZone(id="5", name="Dhankawadi Katraj Road", lat=18.4570, lon=73.8560, historical_risk=3),
+                # Added from real PMC/news-reported hotspots (2025 monsoon)
+                FloodZone(id="6", name="Kothrud", lat=18.5074, lon=73.8077, historical_risk=3),
+                FloodZone(id="7", name="Karvenagar", lat=18.4837, lon=73.8148, historical_risk=3),
+                FloodZone(id="8", name="Bavdhan", lat=18.5089, lon=73.7749, historical_risk=3),
+                FloodZone(id="9", name="Aundh", lat=18.5590, lon=73.8080, historical_risk=3),
+                FloodZone(id="10", name="Bopodi (Bhau Patil Road)", lat=18.5622, lon=73.8420, historical_risk=4),
+                FloodZone(id="11", name="Hadapsar", lat=18.5089, lon=73.9260, historical_risk=3),
+                FloodZone(id="12", name="Yerawada", lat=18.5580, lon=73.8790, historical_risk=3),
+                FloodZone(id="13", name="Baner", lat=18.5590, lon=73.7870, historical_risk=3),
+                FloodZone(id="14", name="Balewadi", lat=18.5730, lon=73.7700, historical_risk=3),
+                FloodZone(id="15", name="Kondhwa", lat=18.4650, lon=73.8930, historical_risk=3),
+                FloodZone(id="16", name="Navale Bridge / NH area", lat=18.4630, lon=73.8110, historical_risk=4),
+                FloodZone(id="17", name="Khadakwasla / Dhayari Narhe", lat=18.4520, lon=73.7770, historical_risk=4),
             ]
             db.add_all(seed_zones)
             db.commit()
