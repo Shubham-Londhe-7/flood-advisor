@@ -1,6 +1,6 @@
 """
 Pune Flood/Waterlogging Advisor - Backend
-Now backed by Postgres (Supabase) via SQLAlchemy - see database.py
+Postgres (Supabase) via SQLAlchemy + live rainfall + route-check.
 """
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +11,8 @@ from sqlalchemy import func
 import uuid
 
 from database import init_db, get_db, FloodZone, Report as ReportModel
+from weather import get_rainfall_mm, rainfall_risk_boost
+from route_check import check_route
 
 app = FastAPI(title="Pune Flood Advisor API")
 
@@ -27,7 +29,7 @@ def on_startup():
     init_db()  # creates tables + seeds zones if empty
 
 
-class Report(BaseModel):
+class ReportIn(BaseModel):
     lat: float
     lon: float
     severity: int  # 1-5
@@ -41,12 +43,19 @@ class RiskScoreResponse(BaseModel):
     lon: float
     risk_score: float
     risk_level: str
+    rainfall_mm: float
+
+
+class RouteCheckIn(BaseModel):
+    start_lat: float
+    start_lon: float
+    end_lat: float
+    end_lon: float
 
 
 def compute_risk(zone: FloodZone, db: Session) -> RiskScoreResponse:
     """
-    Risk score = historical baseline + live report boost.
-    Phase 2: add rainfall API weight here.
+    Risk score = historical baseline + live crowd-report boost + live rainfall boost.
     """
     base = zone.historical_risk
 
@@ -54,9 +63,12 @@ def compute_risk(zone: FloodZone, db: Session) -> RiskScoreResponse:
         func.abs(ReportModel.lat - zone.lat) < 0.01,
         func.abs(ReportModel.lon - zone.lon) < 0.01,
     ).count()
-
     report_boost = min(nearby_reports * 0.5, 3)
-    score = min(base + report_boost, 10)
+
+    rain_mm = get_rainfall_mm(zone.lat, zone.lon)
+    rain_boost = rainfall_risk_boost(rain_mm)
+
+    score = min(base + report_boost + rain_boost, 10)
 
     if score >= 7:
         level = "high"
@@ -67,7 +79,7 @@ def compute_risk(zone: FloodZone, db: Session) -> RiskScoreResponse:
 
     return RiskScoreResponse(
         zone_id=zone.id, name=zone.name, lat=zone.lat, lon=zone.lon,
-        risk_score=score, risk_level=level,
+        risk_score=score, risk_level=level, rainfall_mm=rain_mm,
     )
 
 
@@ -78,13 +90,13 @@ def root():
 
 @app.get("/zones", response_model=list[RiskScoreResponse])
 def get_zones(db: Session = Depends(get_db)):
-    """Get all flood zones with current risk score."""
+    """Get all flood zones with current risk score (historical + reports + live rainfall)."""
     zones = db.query(FloodZone).all()
     return [compute_risk(z, db) for z in zones]
 
 
 @app.post("/report")
-def submit_report(report: Report, db: Session = Depends(get_db)):
+def submit_report(report: ReportIn, db: Session = Depends(get_db)):
     """User submits a live waterlogging report."""
     entry = ReportModel(
         id=str(uuid.uuid4()),
@@ -112,5 +124,32 @@ def get_reports(db: Session = Depends(get_db)):
     ]
 
 
-# TODO Phase 2: pull live rainfall from OpenWeatherMap/IMD, add to compute_risk()
-# TODO Phase 3: route-check endpoint — given start/end lat-lon, check if path crosses high-risk zone
+@app.post("/route-check")
+def route_check(payload: RouteCheckIn, db: Session = Depends(get_db)):
+    """
+    Given a start and end point, warn if the route passes near any
+    medium/high-risk flood zone. Uses straight-line sampling (MVP approximation).
+    """
+    zones = db.query(FloodZone).all()
+    nearby = check_route(
+        zones, payload.start_lat, payload.start_lon, payload.end_lat, payload.end_lon
+    )
+
+    warnings = []
+    for entry in nearby:
+        zone = entry["zone"]
+        risk = compute_risk(zone, db)
+        if risk.risk_level in ("medium", "high"):
+            warnings.append({
+                "zone_name": zone.name,
+                "risk_level": risk.risk_level,
+                "risk_score": risk.risk_score,
+                "distance_km": entry["distance_km"],
+            })
+
+    warnings.sort(key=lambda w: w["risk_score"], reverse=True)
+
+    return {
+        "safe": len(warnings) == 0,
+        "warnings": warnings,
+    }
