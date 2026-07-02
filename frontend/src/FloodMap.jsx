@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-const API_BASE = "http://localhost:8000"; // change on deploy
+const API_BASE = "https://flood-advisor.onrender.com";
 
 const riskColor = {
   high: "#e63946",
